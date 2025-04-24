@@ -294,7 +294,7 @@ namespace bs2API
             }
             string requestUri = $"/api/users";
 
-            Console.WriteLine("Enter User ID: ");
+            Console.WriteLine("Enter User ID Not Used Above: ");
             string uID = Console.ReadLine();
 
             Console.WriteLine("Enter Name: ");
@@ -307,6 +307,13 @@ namespace bs2API
             Console.WriteLine("Enter End Period: ");
             string endDate = Console.ReadLine();
             DateTime convertedEndDate = DateTime.Parse(endDate);
+
+            Console.WriteLine("Enter User Group ID(default all users is 1): ");
+            int userID = int.Parse(Console.ReadLine());
+
+
+            var newUserRequest = new NewUserObject { User = new UserProperties { UserId = uID, Name = name, StartDateTime = convertedStartDate, ExpiryDateTime = convertedEndDate, UserGroupId = new ID { Id = userID } } };
+            string jsonPayload = JsonConvert.SerializeObject(newUserRequest);
 
 
 
