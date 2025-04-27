@@ -1,10 +1,12 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -22,7 +24,6 @@ namespace bs2API
         [JsonProperty("password")]
         public string Password { get; set; }
     }
-
     public class LoginRequest
     {
         [JsonProperty("User")]
@@ -53,6 +54,74 @@ namespace bs2API
     {
         [JsonProperty("UserCollection")]
         public UserCollection Collection { get; set; }
+    }
+
+
+    //Default DTO for a JSON property that uses ID as default
+    public class ID
+    {
+        [JsonProperty("id")]
+        public int Id { get; set; }
+    }
+
+    //entire JSON object for creating a new user
+    //required Fields: user_id, user_group_id, start_datetime, expiry_datetime
+
+    public class UserProperties
+    {
+        [JsonProperty("user_id")]
+        public string UserId { get; set; }
+
+        [JsonProperty("user_group_id")]
+        public ID UserGroupId { get; set; }
+
+        [JsonProperty("start_datetime")]
+        public DateTimeOffset StartDateTime { get; set; }
+
+        [JsonProperty("expiry_datetime")]
+        public DateTimeOffset ExpiryDateTime { get; set; }
+
+        [JsonProperty("disabled", NullValueHandling = NullValueHandling.Ignore)]
+        public bool Disabled { get; set; }
+
+        [JsonProperty("name", NullValueHandling = NullValueHandling.Ignore)]
+        public string Name { get; set; }
+
+        [JsonProperty("email", NullValueHandling = NullValueHandling.Ignore)]
+        public string Email { get; set; }
+
+        [JsonProperty("department", NullValueHandling = NullValueHandling.Ignore)]
+        public string Department { get; set; }
+
+        [JsonProperty("user_title", NullValueHandling = NullValueHandling.Ignore)]
+        public string UserTitle { get; set; }
+
+        [JsonProperty("photo", NullValueHandling = NullValueHandling.Ignore)]
+        public string Photo { get; set; }
+
+        [JsonProperty("phone", NullValueHandling = NullValueHandling.Ignore)]
+        public string Phone { get; set; }
+
+        [JsonProperty("permission", NullValueHandling = NullValueHandling.Ignore)]
+        public ID Permission { get; set; }
+
+        [JsonProperty("access_groups", NullValueHandling = NullValueHandling.Ignore)]
+        public List<ID> accessGroups { get; set; }
+
+        [JsonProperty("login_id", NullValueHandling = NullValueHandling.Ignore)]
+        public string LoginId { get; set; }
+
+        [JsonProperty("password")]
+        public string Password { get; set; }
+
+        [JsonProperty("user_ip", NullValueHandling = NullValueHandling.Ignore)]
+        public string UserIp { get; set; }
+    }
+
+    public class NewUserObject
+    {
+        [JsonProperty("User")]
+        public UserProperties User { get; set; }
     }
 
 
@@ -91,15 +160,49 @@ namespace bs2API
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
-
-        /// <summary>
-        /// Logs into the BioStar 2 API and stores the session ID.
-        /// </summary>
-        /// <param name="loginId">User's Login ID</param>
-        /// <param name="password">User's Password</param>
-        /// <returns>True if login successful, otherwise false.</returns>
-        public async Task<bool> LoginAsync(string loginId, string password)
+        private string ReadPassword()
         {
+            var password = new StringBuilder();
+            ConsoleKeyInfo key;
+
+            do
+            {
+                key = Console.ReadKey(true); // True hides the character
+
+                // Ignore special keys like Enter, Backspace, etc. initially
+                if (!char.IsControl(key.KeyChar))
+                {
+                    password.Append(key.KeyChar);
+                    Console.Write("*"); // Display asterisk for feedback
+                }
+                else
+                {
+                    // Handle Backspace
+                    if (key.Key == ConsoleKey.Backspace && password.Length > 0)
+                    {
+                        password.Remove(password.Length - 1, 1);
+                        // Move cursor back, write space, move back again
+                        Console.Write("\b \b");
+                    }
+                }
+                // Stop reading when Enter key is pressed
+            } while (key.Key != ConsoleKey.Enter);
+
+            return password.ToString();
+        }
+
+
+        public async Task<bool> LoginAsync()
+        {
+
+            // --- Securely Get Credentials ---
+            Console.Write("Enter BioStar 2 Login ID: ");
+            string loginId = Console.ReadLine();
+
+            Console.Write("Enter BioStar 2 Password: ");
+            string password = ReadPassword(); // Securely read password
+            Console.WriteLine(); // New line after password input
+
             var loginRequest = new LoginRequest
             {
                 User = new UserCredentials { LoginId = loginId, Password = password }
@@ -225,6 +328,84 @@ namespace bs2API
             }
         }
 
+
+
+        public async Task<bool> CreatUserAsync()
+        {
+
+            string format = "yyyyMMddHHmmss";
+            if (string.IsNullOrEmpty(_sessionId))
+            {
+                Console.Error.WriteLine("Error: Not logged in. Please login first.");
+                return false;
+            }
+
+            string requestUri = $"/api/users";
+
+            Console.WriteLine("Enter User ID Not Used Above: ");
+            string uID = Console.ReadLine();
+
+            Console.WriteLine("Enter Name: ");
+            string name = Console.ReadLine();
+
+            Console.WriteLine("Enter Start Period: ");
+            string startDate = Console.ReadLine();
+            DateTime convertedStartDate = DateTime.ParseExact(startDate, format, null);
+
+            Console.WriteLine("Enter End Period: ");
+            string endDate = Console.ReadLine();
+            DateTime convertedEndDate = DateTime.ParseExact(endDate, format, null);
+
+            Console.WriteLine("Enter User Group ID(default all users is 1): ");
+            string userGroupID = Console.ReadLine();
+            int userGID = int.Parse(userGroupID);
+
+            var newUserRequest = new NewUserObject { User = new UserProperties { UserId = uID, UserGroupId = new ID { Id = userGID }, Name = name, StartDateTime = convertedStartDate, ExpiryDateTime = convertedEndDate} };
+            string jsonPayload = JsonConvert.SerializeObject(newUserRequest);
+            Console.WriteLine($"\nDEBUG: Sending JSON Payload:\n{jsonPayload}\n"); // <-- ADD THIS LINE
+
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await _httpClient.PostAsync(requestUri, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("User created successfully.");
+                    return true;
+                }
+                else
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Console.Error.WriteLine($"Failed to create user. Status Code: {response.StatusCode}. Response: {errorContent}");
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        Console.Error.WriteLine("Session might have expired Or invalid permissions");
+                        _sessionId = null; // Clear potentially invalid session ID
+                        _httpClient.DefaultRequestHeaders.Remove("bs-session-id");
+                    }
+                    return false;
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.Error.WriteLine($"GetUsers network error: {ex.Message}");
+                return false;
+            }
+
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"An unexpected error occurred while creating user: {ex.Message}");
+                return false;
+            }
+
+
+
+
+        }
+
+
         // --- Add other API call methods here ---
         // Example:
         // public async Task<Door> GetDoorAsync(int doorId) { ... }
@@ -252,19 +433,13 @@ namespace bs2API
             // Use using statement for automatic disposal if ApiClient lifetime is limited to Main
             using (var apiClient = new BioStar2ApiClient()) // Optional: Pass custom URL if needed
             {
-                // --- Securely Get Credentials ---
-                Console.Write("Enter BioStar 2 Login ID: ");
-                string loginId = Console.ReadLine();
 
-                Console.Write("Enter BioStar 2 Password: ");
-                string password = ReadPassword(); // Securely read password
-                Console.WriteLine(); // New line after password input
 
                 // --- Login ---
-                bool loginSuccess = await apiClient.LoginAsync(loginId, password);
+                bool loginSuccess = await apiClient.LoginAsync();
 
                 // IMPORTANT: Clear password from memory immediately after use
-                password = null;
+
                 GC.Collect(); // Suggest garbage collection (though not guaranteed immediate removal)
 
 
@@ -277,9 +452,9 @@ namespace bs2API
 
                 // --- Example: Call Get Users API ---
                 Console.WriteLine("\nAttempting to get users...");
-                var usersResponse = await apiClient.GetUsersAsync(groupId: 1, limit: 10); // Get first 10 users from group 1
+                var usersResponse = await apiClient.GetUsersAsync(); // Get first 10 users from group 1
 
-                if (usersResponse != null && usersResponse.Collection?.Rows != null)
+                if (usersResponse != null && usersResponse.Collection.Rows != null)
                 {
                     Console.WriteLine($"Successfully retrieved {usersResponse.Collection.Rows.Count} users (Total in group: {usersResponse.Collection.Total}):");
                     foreach (var user in usersResponse.Collection.Rows)
@@ -292,65 +467,28 @@ namespace bs2API
                     Console.WriteLine("Failed to retrieve users.");
                 }
 
-                // --- Add more API calls based on user input or program logic ---
-                // Example structure for interactive console:
-                /*
-                while(true)
+                Console.WriteLine("\nEnter User Details: ");
+
+                var userCreation = await apiClient.CreatUserAsync();
+                if (!userCreation)
                 {
-                    Console.WriteLine("\nEnter command (e.g., 'getusers', 'exit'):");
-                    string command = Console.ReadLine()?.ToLower();
-
-                    switch(command)
-                    {
-                        case "getusers":
-                            // Call GetUsersAsync again, maybe with different parameters
-                            break;
-                        case "exit":
-                            return;
-                        default:
-                            Console.WriteLine("Unknown command.");
-                            break;
-                    }
-                }
-                */
-
-                Console.WriteLine("\nPress any key to exit.");
-                Console.ReadKey();
-            } // ApiClient will be disposed here if using 'using'
-        }
-
-        /// <summary>
-        /// Reads password securely from the console without echoing characters.
-        /// </summary>
-        public static string ReadPassword()
-        {
-            var password = new StringBuilder();
-            ConsoleKeyInfo key;
-
-            do
-            {
-                key = Console.ReadKey(true); // True hides the character
-
-                // Ignore special keys like Enter, Backspace, etc. initially
-                if (!char.IsControl(key.KeyChar))
-                {
-                    password.Append(key.KeyChar);
-                    Console.Write("*"); // Display asterisk for feedback
+                    Console.WriteLine("User creation failed. Exiting.");
+                    Console.ReadKey(); // Keep console open
+                    return;
                 }
                 else
                 {
-                    // Handle Backspace
-                    if (key.Key == ConsoleKey.Backspace && password.Length > 0)
-                    {
-                        password.Remove(password.Length - 1, 1);
-                        // Move cursor back, write space, move back again
-                        Console.Write("\b \b");
-                    }
-                }
-                // Stop reading when Enter key is pressed
-            } while (key.Key != ConsoleKey.Enter);
+                    Console.WriteLine("User created successfully.");
 
-            return password.ToString();
+                    Console.WriteLine("\nPress any key to exit.");
+                    Console.ReadKey();
+                } // ApiClient will be disposed here if using 'using'
+            }
+
+            /// <summary>
+            /// Reads password securely from the console without echoing characters.
+            /// </summary>
+
         }
     }
 }
