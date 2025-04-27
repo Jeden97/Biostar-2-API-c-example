@@ -360,7 +360,7 @@ namespace bs2API
             string userGroupID = Console.ReadLine();
             int userGID = int.Parse(userGroupID);
 
-            var newUserRequest = new NewUserObject { User = new UserProperties { UserId = uID, UserGroupId = new ID { Id = userGID }, Name = name, StartDateTime = convertedStartDate, ExpiryDateTime = convertedEndDate} };
+            var newUserRequest = new NewUserObject { User = new UserProperties { UserId = uID, UserGroupId = new ID { Id = userGID }, Name = name, StartDateTime = convertedStartDate, ExpiryDateTime = convertedEndDate } };
             string jsonPayload = JsonConvert.SerializeObject(newUserRequest);
             Console.WriteLine($"\nDEBUG: Sending JSON Payload:\n{jsonPayload}\n"); // <-- ADD THIS LINE
 
