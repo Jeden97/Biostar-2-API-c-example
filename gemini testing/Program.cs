@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.VisualBasic.FileIO;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -111,7 +112,7 @@ namespace bs2API
         [JsonProperty("login_id", NullValueHandling = NullValueHandling.Ignore)]
         public string LoginId { get; set; }
 
-        [JsonProperty("password")]
+        [JsonProperty("password", NullValueHandling = NullValueHandling.Ignore)]
         public string Password { get; set; }
 
         [JsonProperty("user_ip", NullValueHandling = NullValueHandling.Ignore)]
@@ -229,7 +230,7 @@ namespace bs2API
                         {
                             // Add session ID to default headers for subsequent requests
                             _httpClient.DefaultRequestHeaders.Add("bs-session-id", _sessionId);
-                            Console.WriteLine("Login successful.");
+                            Console.WriteLine("\nLogin successful.\n");
                             return true;
                         }
                     }
@@ -332,8 +333,15 @@ namespace bs2API
 
         public async Task<bool> CreatUserAsync()
         {
+            string format = "yyyy-MM-dd HH:mm:ss";
+            System.Globalization.CultureInfo provider = System.Globalization.CultureInfo.InvariantCulture;
 
-            string format = "yyyyMMddHHmmss";
+            var settings = new JsonSerializerSettings
+            {
+                // Specify the EXACT format the API expects
+                DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ",
+            };
+            
             if (string.IsNullOrEmpty(_sessionId))
             {
                 Console.Error.WriteLine("Error: Not logged in. Please login first.");
@@ -348,21 +356,21 @@ namespace bs2API
             Console.WriteLine("Enter Name: ");
             string name = Console.ReadLine();
 
-            Console.WriteLine("Enter Start Period: ");
+            Console.WriteLine("Enter Start Period: (Format Required: yyyy-MM-dd HH:mm:ss) ");
             string startDate = Console.ReadLine();
-            DateTime convertedStartDate = DateTime.ParseExact(startDate, format, null);
+            DateTime convertedStartDate = DateTime.ParseExact(startDate, format, provider, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
 
-            Console.WriteLine("Enter End Period: ");
+            Console.WriteLine("Enter End Period: (Format Required: yyyy-MM-dd HH:mm:ss) ");
             string endDate = Console.ReadLine();
-            DateTime convertedEndDate = DateTime.ParseExact(endDate, format, null);
+            DateTime convertedEndDate = DateTime.ParseExact(endDate, format, provider, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
 
             Console.WriteLine("Enter User Group ID(default all users is 1): ");
             string userGroupID = Console.ReadLine();
             int userGID = int.Parse(userGroupID);
 
             var newUserRequest = new NewUserObject { User = new UserProperties { UserId = uID, UserGroupId = new ID { Id = userGID }, Name = name, StartDateTime = convertedStartDate, ExpiryDateTime = convertedEndDate } };
-            string jsonPayload = JsonConvert.SerializeObject(newUserRequest);
-            Console.WriteLine($"\nDEBUG: Sending JSON Payload:\n{jsonPayload}\n"); // <-- ADD THIS LINE
+            string jsonPayload = JsonConvert.SerializeObject(newUserRequest, settings);
+            
 
             var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
@@ -442,6 +450,7 @@ namespace bs2API
 
                 GC.Collect(); // Suggest garbage collection (though not guaranteed immediate removal)
 
+                
 
                 if (!loginSuccess)
                 {
@@ -450,41 +459,72 @@ namespace bs2API
                     return;
                 }
 
-                // --- Example: Call Get Users API ---
-                Console.WriteLine("\nAttempting to get users...");
-                var usersResponse = await apiClient.GetUsersAsync(); // Get first 10 users from group 1
-
-                if (usersResponse != null && usersResponse.Collection.Rows != null)
+                
+                
+                int option;
+                while (true)
                 {
-                    Console.WriteLine($"Successfully retrieved {usersResponse.Collection.Rows.Count} users (Total in group: {usersResponse.Collection.Total}):");
-                    foreach (var user in usersResponse.Collection.Rows)
+                    Console.WriteLine("Select an option:\n Option 1: get all users\n Option 2 create a new user");
+                    string input = Console.ReadLine();
+                    if (input == "exit")
                     {
-                        Console.WriteLine($"- ID: {user.UserId}, Name: {user.Name}");
+                        break;
                     }
-                }
-                else
-                {
-                    Console.WriteLine("Failed to retrieve users.");
+
+                    if (int.TryParse(input, out option))
+                    {
+                        Console.WriteLine("Invalid Option, Select an option:\n Option 1: get all users\n Option 2 create a new user");
+                        continue;
+                    }
+                    
+                    if (option == 1)
+                    {
+                        // --- Example: Call Get Users API ---
+                        Console.WriteLine("\nAttempting to get users...");
+                        var usersResponse = await apiClient.GetUsersAsync(); // Get first 10 users from group 1
+
+                        if (usersResponse != null && usersResponse.Collection.Rows != null)
+                        {
+                            Console.WriteLine($"Successfully retrieved {usersResponse.Collection.Rows.Count} users (Total in group: {usersResponse.Collection.Total}):");
+                            foreach (var user in usersResponse.Collection.Rows)
+                            {
+                                Console.WriteLine($"- ID: {user.UserId}, Name: {user.Name}");
+                                
+                            }
+                            break;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Failed to retrieve users.");
+
+                        }
+                        
+                    }
+                    else if (option == 2)
+                    {
+                        Console.WriteLine("\nEnter User Details: ");
+
+                        var userCreation = await apiClient.CreatUserAsync();
+                        if (!userCreation)
+                        {
+                            Console.WriteLine("User creation failed. Exiting.");
+                            Console.ReadKey(); // Keep console open
+
+                        }
+
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid option selected.");
+                        continue;
+                    }
+
+                    
+                    
+
                 }
 
-                Console.WriteLine("\nEnter User Details: ");
-
-                var userCreation = await apiClient.CreatUserAsync();
-                if (!userCreation)
-                {
-                    Console.WriteLine("User creation failed. Exiting.");
-                    Console.ReadKey(); // Keep console open
-                    return;
-                }
-                else
-                {
-                    Console.WriteLine("User created successfully.");
-
-                    Console.WriteLine("\nPress any key to exit.");
-                    Console.ReadKey();
-                } // ApiClient will be disposed here if using 'using'
             }
-
             /// <summary>
             /// Reads password securely from the console without echoing characters.
             /// </summary>
